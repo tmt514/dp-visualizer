@@ -394,9 +394,15 @@ class DPViewer extends Component {
         )
       }
     }
+    console.log(table);
     return (<div>
       <h2>Visualization</h2>
+      <div style={{position:"relative"}}>
       {table}
+      <canvas style={{backgroundColor: "blue",
+        position: "absolute", left: "0px", top: "0px"}}>
+      </canvas>
+      </div>
       </div>
       )
   }
