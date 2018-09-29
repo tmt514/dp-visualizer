@@ -157,16 +157,31 @@ class RecurrenceRelation extends Component {
       ret += ast.operator;
       ret += this.modify_code_from_ast(ast.right, focusing_calls);
       ret += ")"
-    } else if (ast.type === "MemberExpression") {
+    } else if (ast.type === "AssignmentExpression") {
       ret += "("
-      ret += this.modify_code_from_ast(ast.object, focusing_calls);
-      ret += ")["
-      ret += this.modify_code_from_ast(ast.property, focusing_calls);
-      ret += "]"
+      ret += this.modify_code_from_ast(ast.left, focusing_calls);
+      ret += ast.operator;
+      ret += this.modify_code_from_ast(ast.right, focusing_calls);
+      ret += ")"
+    } else if (ast.type === "MemberExpression") {
+      if (ast.property.type === "Identifier") {
+        ret += "("
+        ret += this.modify_code_from_ast(ast.object, focusing_calls);
+        ret += ")."
+        ret += ast.property.name;
+      } else {
+        ret += "("
+        ret += this.modify_code_from_ast(ast.object, focusing_calls);
+        ret += ")["
+        ret += this.modify_code_from_ast(ast.property, focusing_calls);
+        ret += "]"
+      }
     } else if (ast.type === "Identifier") {
       ret += ast.name;
     } else if (ast.type === "Literal") {
       ret += ast.raw;
+    } else if (ast.type === "ExpressionStatement") {
+      ret += this.modify_code_from_ast(ast.expression, focusing_calls);
     } else if (ast.type === "ReturnStatement") {
       ret += "return "
       ret += this.modify_code_from_ast(ast.argument, focusing_calls);
@@ -214,17 +229,14 @@ class RecurrenceRelation extends Component {
     const global_evals = `
 max = Math.max;
 min = Math.min;
-A = "1234567";
-B = "123456789";
 global_dependency_list = [];
     `
-
+    eval.call(window, global_var_decl);
     eval.call(window, global_evals);
     eval.call(window, gencode);
     eval.call(window, `${callee_name}([${arg_list.toString()}])`);
 
-    console.log(window.global_dependency_list.toString());
-
+    return window.global_dependency_list;
   }
 
   on_change_content() {
@@ -237,8 +249,6 @@ global_dependency_list = [];
   }
 
   render() {
-    console.log(this.state.ast)
-    console.log(this.find_next_call("dp", [3, 4]))
     return (
       <div>
         <textarea
@@ -255,8 +265,39 @@ global_dependency_list = [];
 
 
 class DPViewer extends Component {
-  calculate(objective_function, recurrence_relation) {
+  calculate(input_parameters, objective_function, recurrence_relation) {
+    var global_var_decl = input_parameters.map((e) => e.decl).join("\n");
+    var obj_ast = objective_function.state.ast;
+    var stmt, expr_stmt, code;
+    eval.call(window, global_var_decl);
+    for (stmt of obj_ast.body) {
+      if (stmt.type === "LabeledStatement") {
+        if (stmt.label.name === "define") {
+          expr_stmt = stmt.body;
+          code = recurrence_relation.modify_code_from_ast(expr_stmt, {});
+          eval.call(window, code);
+        }
+      }
+    }
     
+    for (stmt of obj_ast.body) {
+      if (stmt.type === "LabeledStatement") {
+        if (stmt.label.name === "output") {
+          expr_stmt = stmt.body;
+          if (expr_stmt.type === "ExpressionStatement") {
+            var call_expr = expr_stmt.expression;
+            if (call_expr.type === "CallExpression") {
+              var callee = call_expr.callee.name;
+              var args = call_expr.arguments.map((e) => recurrence_relation.modify_code_from_ast(e, {})).map((e) => eval.call(window, e));
+              console.log(recurrence_relation.find_next_call(callee, args, global_var_decl));
+              console.log(args);
+              
+            }
+          }
+        }
+      }
+    }
+    console.log(global_var_decl);
   }
   render() {
     return (<div>Visualizer</div>)
@@ -267,7 +308,10 @@ class IndexPage extends Component {
   constructor() {
     super();
     this.state = {
-      var_list: [{varname: "A", vartype: "array(int)", varvalue: "abcdefg"}],
+      var_list: [
+        {varname: "A", vartype: "string", varvalue: "algorithm", decl: "A = \"algorithm\";"},
+        {varname: "B", vartype: "string", varvalue: "altruistic", decl: "B = \"altruistic\";"},
+      ],
     }
   }
 
@@ -280,10 +324,17 @@ class IndexPage extends Component {
   update_var_list(idx, name, type, value) {
     var old_state = this.state;
     var new_state = Object.assign({}, old_state);
+    var combine = function(name, type, value) {
+      if (type === "string") return `${name} = "${value}";`
+      else if (type === "array(int)") return `${name} = ${value};`
+      else if (type === "int") return `${name} = ${value};`
+      else console.wran("Not Implemented!");
+    };
     new_state.var_list[idx] = {
       varname: name,
       vartype: type,
-      varvalue: value
+      varvalue: value,
+      decl: combine(name, type, value)
     }
     this.setState(new_state);
   }
@@ -292,6 +343,13 @@ class IndexPage extends Component {
     var new_state = Object.assign({}, old_state);
     new_state.var_list.push({varname: "new_var", vartype: "string", varvalue: "sample"})
     this.setState(new_state);
+  }
+  
+  update_viewer() {
+    this.dpviewer.calculate(
+      this.state.var_list,
+      this.objective_function,
+      this.recurrence_relation);
   }
 
   render() {
@@ -322,14 +380,12 @@ class IndexPage extends Component {
     
     <h2>Recurrence Relation</h2>
     <RecurrenceRelation
-      ref={this.recurrence_relation}
+      ref={(e) => this.recurrence_relation=e}
       parent={this}
       />
     
     <button
-      onClick={this.dpviewer.calculate.bind(this,
-            this.objective_function,
-            this.recurrence_relation)}>Visualize</button>
+      onClick={this.update_viewer.bind(this)}>Visualize</button>
     <DPViewer
       ref={(e)=>this.dpviewer=e}
     />
