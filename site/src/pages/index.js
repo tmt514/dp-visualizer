@@ -4,6 +4,9 @@ import { Link } from 'gatsby'
 
 import Layout from '../components/layout'
 import { Component } from 'react';
+import styles from './index.module.css';
+
+
 
 class InputParameter extends Component {
   update_to_var() {
@@ -164,11 +167,11 @@ class RecurrenceRelation extends Component {
       ret += this.modify_code_from_ast(ast.right, focusing_calls);
       ret += ")"
     } else if (ast.type === "MemberExpression") {
-      if (ast.property.type === "Identifier") {
+      if (ast.computed === false) {
         ret += "("
         ret += this.modify_code_from_ast(ast.object, focusing_calls);
         ret += ")."
-        ret += ast.property.name;
+        ret += this.modify_code_from_ast(ast.property, focusing_calls);
       } else {
         ret += "("
         ret += this.modify_code_from_ast(ast.object, focusing_calls);
@@ -225,7 +228,7 @@ class RecurrenceRelation extends Component {
     var meow = {};
     meow[callee_name] = true;
     var gencode = this.modify_code_from_ast(this.state.ast, meow);
-  console.log(gencode);
+  //console.log(gencode);
     const global_evals = `
 max = Math.max;
 min = Math.min;
@@ -265,6 +268,13 @@ global_dependency_list = [];
 
 
 class DPViewer extends Component {
+  constructor() {
+    super();
+    this.state = {
+      dimension: 0
+    };
+  }
+
   calculate(input_parameters, objective_function, recurrence_relation) {
     var global_var_decl = input_parameters.map((e) => e.decl).join("\n");
     var obj_ast = objective_function.state.ast;
@@ -280,6 +290,7 @@ class DPViewer extends Component {
       }
     }
     
+    var callee = null, args;
     for (stmt of obj_ast.body) {
       if (stmt.type === "LabeledStatement") {
         if (stmt.label.name === "output") {
@@ -287,20 +298,107 @@ class DPViewer extends Component {
           if (expr_stmt.type === "ExpressionStatement") {
             var call_expr = expr_stmt.expression;
             if (call_expr.type === "CallExpression") {
-              var callee = call_expr.callee.name;
-              var args = call_expr.arguments.map((e) => recurrence_relation.modify_code_from_ast(e, {})).map((e) => eval.call(window, e));
-              console.log(recurrence_relation.find_next_call(callee, args, global_var_decl));
-              console.log(args);
-              
+              callee = call_expr.callee.name;
+              args = call_expr.arguments.map((e) => recurrence_relation.modify_code_from_ast(e, {})).map((e) => eval.call(window, e));
             }
           }
         }
       }
     }
-    console.log(global_var_decl);
+
+    var computed_states = {};
+    var computed_states_count = 0;
+    var uncomputed_states_count = 0;
+    var computed_state_limit = 10000;
+
+    const gather_all_states = (callee, args) => {
+      var signature = JSON.stringify([callee, args]);
+      if (computed_states_count >= computed_state_limit) {
+        uncomputed_states_count += 1;
+        return;
+      }
+      if (computed_states[signature] === undefined) {
+        computed_states_count += 1;        
+        const next_calls = recurrence_relation.find_next_call(callee, args, global_var_decl);
+        computed_states[signature] = next_calls;
+        for (var state of next_calls) {
+          gather_all_states(state[0], state[1]);
+        }
+      }
+    }
+    //console.log(recurrence_relation.find_next_call(callee, args, global_var_decl));
+    //console.log(args);
+    gather_all_states(callee, args);
+    //console.log(recurrence_relation.state.ast);
+    console.log(computed_states);
+    this.display_computed_states(computed_states);
+  }
+
+  display_computed_states(computed_states) {
+    
+    const signatures = Object.keys(computed_states);
+    var dimension = 0;
+    var ranges = [];
+    for (var signature of signatures) {
+      var data = JSON.parse(signature);
+      while (data[1].length > dimension) {
+        const v = data[1][dimension];
+        dimension++;
+        ranges.push({});
+      }
+      for (var i = 0; i < data[1].length; i++) {
+        ranges[i][data[1][i]] = true;
+        //ranges[i][0] = Math.min(ranges[i][0], data[1][i]);
+        //ranges[i][1] = Math.max(ranges[i][1], data[1][i]);
+      }
+    }
+    
+    const new_state = {
+      dimension: dimension,
+      ranges: ranges,
+      dependency_graph: computed_states,
+      
+    }
+    this.setState(new_state);
   }
   render() {
-    return (<div>Visualizer</div>)
+    var table = (<div></div>);
+    if (this.state.dimension === 2) {
+      const xlist = Object.keys(this.state.ranges[0]);
+      const ylist = Object.keys(this.state.ranges[1]);
+      xlist.sort((x, y) => parseInt(x) - parseInt(y));
+      ylist.sort((x, y) => parseInt(x) - parseInt(y));
+      if (xlist.length <= 100 && ylist.length <= 100) {
+        var colidxs = xlist.map((e,idx) => (<th key={idx} className={styles.dp_h}>{e}</th>));
+        var rows = ylist.map((e, idx) => {
+          const cells = xlist.map((f, jdx) => (<td key={jdx} className={styles.dp_s}>
+          </td>));
+          return (
+            <tr key={idx}>
+              <th className={styles.dp_h}>{e}</th>
+              {cells}
+            </tr>
+          )
+        })
+
+        table = (
+          <table className={styles.table}>
+            <tbody>
+              <tr>
+                <th></th>
+                {colidxs}
+              </tr>
+              {rows}
+            </tbody>
+          </table>
+        )
+      }
+    }
+    return (<div>
+      <h2>Visualization</h2>
+      {table}
+      </div>
+      )
   }
 };
 

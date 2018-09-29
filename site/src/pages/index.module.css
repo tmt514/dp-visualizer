@@ -1,0 +1,22 @@
+.dp_s {
+    width: 30px;
+    height: 30px;
+    line-height: 30px;
+    vertical-align: middle;
+    text-align: center;
+    background-color: #FEC;
+    border: 2px solid #777;
+    padding: 0;
+}
+.dp_h {
+    width: 30px;
+    height: 30px;
+    line-height: 30px;
+    vertical-align: middle;
+    text-align: center;
+    background-color: #FDA;
+    padding: 0;
+}
+.table {
+    display: inline-block;
+}
