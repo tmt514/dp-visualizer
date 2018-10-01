@@ -271,7 +271,11 @@ class DPViewer extends Component {
   constructor() {
     super();
     this.state = {
-      dimension: 0
+      callee: {},
+      dimension: 0,
+      ranges: [],
+      dependency_graph: {},
+      focusing_states: {},
     };
   }
 
@@ -339,8 +343,10 @@ class DPViewer extends Component {
     const signatures = Object.keys(computed_states);
     var dimension = 0;
     var ranges = [];
+    var callee = {};
     for (var signature of signatures) {
       var data = JSON.parse(signature);
+      callee[data[0]] = true;
       while (data[1].length > dimension) {
         const v = data[1][dimension];
         dimension++;
@@ -355,23 +361,65 @@ class DPViewer extends Component {
     
     const new_state = {
       dimension: dimension,
+      callee: callee,
       ranges: ranges,
       dependency_graph: computed_states,
-      
+      focusing_states: {},
+      dependent_states: {},
+    }
+    this.setState(new_state);
+  }
+
+  set_focus_on_state_2d(callee, arg_list) {
+    const old_state = this.state;
+    const new_state = Object.assign({}, old_state);
+    new_state.focusing_states = {};
+    new_state.focusing_states[JSON.stringify(arg_list)] = true;
+    new_state.dependent_states = {};
+    var enc = JSON.stringify([callee, arg_list]);
+    var elist = old_state.dependency_graph[enc];
+    if (elist === undefined) {
+      // if string does not found, try integer
+      enc = JSON.stringify([callee, arg_list.map((e)=>parseInt(e))])
+      elist = old_state.dependency_graph[enc];
+    }
+    console.log(old_state.dependency_graph)
+    console.log(enc, elist);
+    if (elist) {
+      for (var t of elist) {
+        var s = t[1].map((e)=>`${e}`);
+        console.log(s);
+        new_state.dependent_states[JSON.stringify(s)] = true;
+      }
     }
     this.setState(new_state);
   }
   render() {
+    console.log(styles);
     var table = (<div></div>);
     if (this.state.dimension === 2) {
+      const callee = Object.keys(this.state.callee)[0];
       const xlist = Object.keys(this.state.ranges[0]);
       const ylist = Object.keys(this.state.ranges[1]);
+
+      console.log(xlist, ylist);
+
       xlist.sort((x, y) => parseInt(x) - parseInt(y));
       ylist.sort((x, y) => parseInt(x) - parseInt(y));
       if (xlist.length <= 100 && ylist.length <= 100) {
-        var colidxs = xlist.map((e,idx) => (<th key={idx} className={styles.dp_h}>{e}</th>));
-        var rows = ylist.map((e, idx) => {
-          const cells = xlist.map((f, jdx) => (<td key={jdx} className={styles.dp_s}>
+        var colidxs = ylist.map((e,idx) => (<th key={idx} className={styles.dp_h}>{e}</th>));
+        var rows = xlist.map((e, idx) => {
+          const cells = ylist.map((f, jdx) => (<td
+            key={jdx}
+            className={`${styles.dp_s} ${
+              this.state.focusing_states[JSON.stringify([e, f])]?
+                styles.dpview_focusing : ""
+            } ${
+              this.state.dependent_states[JSON.stringify([e, f])]?
+                styles.dpview_dependent : ""
+            }`}
+            data-coordinate={`${e},${f}`}
+            onMouseEnter={this.set_focus_on_state_2d.bind(this, callee, [e, f])}>
           </td>));
           return (
             <tr key={idx}>
@@ -395,13 +443,22 @@ class DPViewer extends Component {
       }
     }
     console.log(table);
+    /*
+    <canvas style={{backgroundColor: "rgba(0,0,255,0.5)",
+        position: "absolute", left: "0px", top: "0px",
+        width: "100%",
+        height: "100%",
+        pointerEvents: "none" }}>
+        </canvas>
+         */
     return (<div>
       <h2>Visualization</h2>
-      <div style={{position:"relative"}}>
+      <div style={{
+        position:"relative",
+        display: "inline-block"}}>
       {table}
-      <canvas style={{backgroundColor: "blue",
-        position: "absolute", left: "0px", top: "0px"}}>
-      </canvas>
+      
+      
       </div>
       </div>
       )

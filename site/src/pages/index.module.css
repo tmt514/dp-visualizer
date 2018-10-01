@@ -17,6 +17,12 @@
     background-color: #FDA;
     padding: 0;
 }
+.dpview_focusing {
+    background-color: #F86;
+}
+.dpview_dependent {
+    background-color: #68F;
+}
 .table {
     display: inline-block;
 }
